@@ -196,17 +196,28 @@ func TestWorkflowWithServiceStep(t *testing.T) {
 	assert.NoError(t, r.Run(t.Context()))
 	traces := getTracerStates(tracer)
 	if assert.Len(t, traces, 5) {
-		assert.EqualValues(t, backend_types.State{}, traces[0].CurrStepState)
-		assert.Greater(t, traces[2].CurrStepState.Started, int64(0))
-		assert.EqualValues(t, backend_types.State{Started: traces[2].CurrStepState.Started, Exited: true}, traces[2].CurrStepState)
-		assert.EqualValues(t, backend_types.State{}, traces[3].CurrStepState)
-		assert.Greater(t, traces[4].CurrStepState.Started, int64(0))
-		assert.EqualValues(t, backend_types.State{Started: traces[4].CurrStepState.Started, Exited: true}, traces[4].CurrStepState)
+		dbStarted := findStartedTrace(traces, "db")
+		assert.NotNil(t, dbStarted, "db step should have started")
+		assert.EqualValues(t, backend_types.State{}, dbStarted.CurrStepState)
 
-		assert.Greater(t, traces[4].Workflow.Started, int64(0))
+		buildCompleted := findLastTraceByName(traces, "build")
+		assert.NotNil(t, buildCompleted, "build step should have completed")
+		assert.Greater(t, buildCompleted.CurrStepState.Started, int64(0))
+		assert.EqualValues(t, backend_types.State{Started: buildCompleted.CurrStepState.Started, Exited: true}, buildCompleted.CurrStepState)
+
+		testStarted := findStartedTrace(traces, "test")
+		assert.NotNil(t, testStarted, "test step should have started")
+		assert.EqualValues(t, backend_types.State{}, testStarted.CurrStepState)
+
+		testCompleted := findLastTraceByName(traces, "test")
+		assert.NotNil(t, testCompleted, "test step should have completed")
+		assert.Greater(t, testCompleted.CurrStepState.Started, int64(0))
+		assert.EqualValues(t, backend_types.State{Started: testCompleted.CurrStepState.Started, Exited: true}, testCompleted.CurrStepState)
+
+		assert.Greater(t, testCompleted.Workflow.Started, int64(0))
 		assert.EqualValues(t, state.State{
 			Workflow: state.Workflow{
-				Started: traces[4].Workflow.Started,
+				Started: testCompleted.Workflow.Started,
 			},
 			CurrStep: &backend_types.Step{
 				Name:        "test",
@@ -217,10 +228,10 @@ func TestWorkflowWithServiceStep(t *testing.T) {
 				Commands:    []string{"echo test"},
 			},
 			CurrStepState: backend_types.State{
-				Started: traces[4].CurrStepState.Started,
+				Started: testCompleted.CurrStepState.Started,
 				Exited:  true,
 			},
-		}, traces[4])
+		}, *testCompleted)
 	}
 }
 
